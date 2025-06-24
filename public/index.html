@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>VD Tombola</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #f0f2f5;
+      display: flex;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .container {
+      max-width: 500px;
+      width: 100%;
+      background: white;
+      padding: 2rem;
+      border-radius: 12px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.1);
+    }
+
+    h1 {
+      text-align: center;
+      color: #1FC4B0;
+    }
+
+    .tombola-info {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .tombola-info img {
+      max-width: 100%;
+      max-height: 180px;
+      border-radius: 8px;
+      margin-top: 1rem;
+    }
+
+    #countdown {
+      margin-top: 0.5rem;
+      font-size: 1.1rem;
+      font-weight: bold;
+      color: #ff6347;
+    }
+
+    form label {
+      display: block;
+      margin-bottom: 0.3rem;
+      font-weight: 500;
+      color: #333;
+    }
+
+    form input {
+      width: 100%;
+      padding: 0.8rem;
+      margin-bottom: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      box-sizing: border-box;
+      font-size: 1rem;
+    }
+
+    form input:focus {
+      border-color: #1FC4B0;
+      outline: none;
+    }
+
+    button {
+      width: 100%;
+      padding: 1rem;
+      background-color: #1FC4B0;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #17b1a1;
+    }
+
+    .message {
+      margin-top: 1rem;
+      text-align: center;
+      font-weight: 500;
+    }
+
+    .error {
+      color: red;
+    }
+
+    .success {
+      color: green;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Participer à la Tombola</h1>
+    <div class="tombola-info" id="tombola-info">Chargement...</div>
+    <div id="countdown"></div>
+
+    <form id="participation-form" style="display: none;">
+      <label for="full_name">Nom complet</label>
+      <input type="text" id="full_name" name="full_name" required>
+
+      <label for="email">Adresse email</label>
+      <input type="email" id="email" name="email" required>
+
+      <label for="phone">Téléphone</label>
+      <input type="tel" id="phone" name="phone" required>
+
+      <button type="submit">Participer</button>
+    </form>
+
+    <div class="message" id="response-msg"></div>
+  </div>
+
+  <script>
+    let currentTombola = null;
+
+    async function loadTombola() {
+      const res = await fetch('/api/tombola');
+      const data = await res.json();
+      const infoDiv = document.getElementById('tombola-info');
+
+      if (!data || !data.id) {
+        infoDiv.innerHTML = "<em>Aucune tombola active actuellement.</em>";
+        return;
+      }
+
+      currentTombola = data;
+      infoDiv.innerHTML = `
+        <h2>${data.title}</h2>
+        <p>${data.description}</p>
+        <p><strong>Du ${data.start_date} au ${data.end_date}</strong></p>
+        <img src="${data.image_url}" alt="Lot à gagner">
+      `;
+      document.getElementById('participation-form').style.display = 'block';
+
+      const end = new Date(`${data.end_date}T23:59:59`);
+      updateCountdown(end);
+      setInterval(() => updateCountdown(end), 1000);
+    }
+
+    function updateCountdown(endDate) {
+      const now = new Date();
+      const diff = endDate - now;
+      const el = document.getElementById('countdown');
+
+      if (diff <= 0) {
+        el.innerText = "La tombola est terminée.";
+        return;
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+      const minutes = Math.floor((diff / (1000 * 60)) % 60);
+      const seconds = Math.floor((diff / 1000) % 60);
+
+      el.innerText = `Fin dans ${days}j ${hours}h ${minutes}m ${seconds}s`;
+    }
+
+    document.getElementById('participation-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const full_name = document.getElementById('full_name').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const phone = document.getElementById('phone').value.trim();
+
+      const res = await fetch('/participate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ full_name, email, phone })
+      });
+
+      const msg = document.getElementById('response-msg');
+      msg.className = 'message';
+
+      if (res.ok) {
+        msg.textContent = await res.text();
+        msg.classList.add('success');
+      } else {
+        msg.textContent = await res.text();
+        msg.classList.add('error');
+      }
+    });
+
+    loadTombola();
+  </script>
+</body>
+</html>

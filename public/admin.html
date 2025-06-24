@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+	<meta charset="UTF-8">
+	<title>Admin - VD Tombola</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<style>
+		body {
+			font-family: Arial, sans-serif;
+			margin: 1em;
+			background: #f9f9f9;
+			color: #333;
+		}
+
+		h1,
+		h2 {
+			color: #1FC4B0;
+		}
+
+		section {
+			margin-bottom: 2em;
+			padding: 1em;
+			border: 1px solid #ddd;
+			background: #fff;
+			border-radius: 8px;
+		}
+
+		.table-container {
+			overflow-x: auto;
+		}
+
+		table {
+			width: 100%;
+			border-collapse: collapse;
+			margin-top: 1em;
+			min-width: 800px;
+		}
+
+		th,
+		td {
+			border: 1px solid #ddd;
+			padding: 8px;
+			text-align: left;
+			vertical-align: middle;
+		}
+
+		td img {
+			max-width: 100px;
+			border-radius: 4px;
+		}
+
+		button {
+			margin-top: 1em;
+			padding: 10px 15px;
+			background: #1FC4B0;
+			color: white;
+			border: none;
+			cursor: pointer;
+			border-radius: 5px;
+		}
+
+		form input,
+		form textarea,
+		form label {
+			display: block;
+			width: 100%;
+			margin-top: 0.5em;
+			margin-bottom: 1em;
+			padding: 10px;
+			border: 1px solid #ccc;
+			border-radius: 4px;
+			box-sizing: border-box;
+		}
+
+		input[type="file"] {
+			padding: 0;
+		}
+
+		@media (max-width: 600px) {
+			.table-container {
+				overflow-x: auto;
+			}
+		}
+	</style>
+</head>
+
+<body>
+	<h1>Panneau d'administration - VD Tombola</h1>
+
+	<section id="current">
+		<h2>Tombola active</h2>
+		<div id="active-info">Chargement...</div>
+		<div id="no-active-msg" style="display: none; color: #A00; font-style: italic;">Aucune tombola active pour le
+			moment.</div>
+		<div id="active-controls" style="display: none;">
+			<h3>Participants</h3>
+			<ul id="participants-list"></ul>
+			<button onclick="closeTombola()">Fermer cette tombola</button>
+			<button onclick="drawWinner()">Tirer un gagnant</button>
+		</div>
+	</section>
+
+	<section>
+		<h2>Toutes les tombolas</h2>
+		<div class="table-container">
+			<table id="tombola-table">
+				<thead>
+					<tr>
+						<th>ID</th>
+						<th>Titre</th>
+						<th>Image</th>
+						<th>Début</th>
+						<th>Fin</th>
+						<th>Active</th>
+						<th>Fermée</th>
+						<th>Gagnant</th>
+						<th>Actions</th>
+					</tr>
+				</thead>
+				<tbody></tbody>
+			</table>
+		</div>
+	</section>
+
+	<section>
+		<h2>Créer une nouvelle tombola</h2>
+		<form id="create-form">
+			<label for="title">Titre</label>
+			<input name="title" id="title" placeholder="Titre" required>
+
+			<label for="description">Description</label>
+			<textarea name="description" id="description" placeholder="Description" required></textarea>
+
+			<label for="start_date">Date de début</label>
+			<input type="date" name="start_date" id="start_date" required>
+
+			<label for="end_date">Date de fin</label>
+			<input type="date" name="end_date" id="end_date" required>
+
+			<label for="image_file">Image du lot</label>
+			<input type="file" name="image_file" id="image_file" accept="image/*" required>
+
+			<button type="submit">Créer</button>
+		</form>
+		<p id="create-msg"></p>
+	</section>
+
+	<div id="popup-overlay"
+		style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); justify-content:center; align-items:center;">
+		<div
+			style="background:#fff; padding:1em; border-radius:8px; width:90%; max-width:500px; max-height:80vh; overflow:auto;">
+			<h3>Participants</h3>
+			<ul id="popup-participants-list"></ul>
+			<button onclick="document.getElementById('popup-overlay').style.display='none'">Fermer</button>
+		</div>
+	</div>
+
+	<script>
+		async function loadCurrentTombola() {
+			const res = await fetch('/api/tombola');
+			const info = document.getElementById('active-info');
+			const controls = document.getElementById('active-controls');
+			const msg = document.getElementById('no-active-msg');
+			const data = await res.json();
+
+			if (!data || data.id === undefined) {
+				info.innerHTML = '';
+				msg.style.display = 'block';
+				controls.style.display = 'none';
+				return;
+			}
+
+			msg.style.display = 'none';
+			controls.style.display = 'block';
+
+			info.innerHTML = `
+        <strong>${data.title}</strong><br>
+        ${data.description}<br>
+        Du ${data.start_date} au ${data.end_date}<br>
+        <img src="${data.image_url}" alt="lot" style="max-width: 120px; display: block; margin: 10px 0;" />
+        <em>ID: ${data.id}</em>
+      `;
+
+			const pRes = await fetch('/api/participants/' + data.id);
+			const participants = await pRes.json();
+			const pList = document.getElementById('participants-list');
+			pList.innerHTML = '';
+			participants.forEach(p => {
+				const li = document.createElement('li');
+				li.innerText = `${p.full_name} - ${p.email} - ${p.phone}`;
+				pList.appendChild(li);
+			});
+		}
+
+		async function loadAllTombolas() {
+			const res = await fetch('/api/tombolas');
+			const tombolas = await res.json();
+			const tbody = document.querySelector('#tombola-table tbody');
+			tbody.innerHTML = '';
+			tombolas.forEach(t => {
+				const row = document.createElement('tr');
+				row.innerHTML = `
+          <td>${t.id}</td>
+          <td>${t.title}</td>
+          <td><img src="${t.image_url}" alt="lot"></td>
+          <td>${t.start_date}</td>
+          <td>${t.end_date}</td>
+          <td>${t.active}</td>
+          <td>${t.closed}</td>
+          <td>${t.winner_id ? t.winner_id : '-'}</td>
+          <td><button onclick="showParticipants('${t.id}')">👥 Voir</button></td>
+        `;
+				tbody.appendChild(row);
+			});
+		}
+
+		async function closeTombola() {
+			const res = await fetch('/api/tombola');
+			const tombola = await res.json();
+			const closeRes = await fetch('/admin/close-tombola/' + tombola.id, { method: 'POST' });
+			const text = await closeRes.text();
+			alert(text);
+			await loadCurrentTombola();
+			await loadAllTombolas();
+		}
+
+		async function drawWinner() {
+			const res = await fetch('/api/tombola');
+			const tombola = await res.json();
+			const drawRes = await fetch('/admin/draw/' + tombola.id, { method: 'POST' });
+			const text = await drawRes.text();
+			alert(text);
+		}
+
+		async function showParticipants(tombolaId) {
+			const res = await fetch('/api/participants/' + tombolaId);
+			const participants = await res.json();
+			const list = document.getElementById('popup-participants-list');
+			list.innerHTML = '';
+			participants.forEach(p => {
+				const li = document.createElement('li');
+				li.textContent = `${p.full_name} - ${p.email} - ${p.phone}`;
+				list.appendChild(li);
+			});
+			document.getElementById('popup-overlay').style.display = 'flex';
+		}
+
+		document.getElementById('create-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const formData = new FormData(e.target);
+  const file = formData.get('image_file');
+
+  if (!file) return alert("Veuillez sélectionner une image.");
+
+  // 1. Upload réel de l’image (normalisée)
+  const imageUpload = new FormData();
+  imageUpload.append('file', file);
+
+  const uploadRes = await fetch('/admin/upload-image', {
+    method: 'POST',
+    body: imageUpload
+  });
+
+  if (!uploadRes.ok) return alert("Échec de l'upload de l'image.");
+  const { filename } = await uploadRes.json(); // nom réel
+
+  // 2. Création de la tombola avec ce nom
+  const data = {
+    title: formData.get("title"),
+    description: formData.get("description"),
+    start_date: formData.get("start_date"),
+    end_date: formData.get("end_date"),
+    image_url: `/images/${filename}`
+  };
+
+  const res = await fetch('/admin/create-tombola', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+
+  const text = await res.text();
+  document.getElementById('create-msg').innerText = text;
+  await loadAllTombolas();
+  await loadCurrentTombola();
+});
+
+		loadCurrentTombola();
+		loadAllTombolas();
+	</script>
+</body>
+
+</html>
